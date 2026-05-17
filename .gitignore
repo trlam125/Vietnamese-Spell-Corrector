@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Models (large binary files)
+models/*.pkl
+
+# Data (large raw files)
+data/vi.txt
+data/*.xml
+data/*.bz2
+data/*.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+MEMORY.md
