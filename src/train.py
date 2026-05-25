@@ -7,7 +7,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from collections import Counter, defaultdict
 
-from preprocess import clean_text, tokenize, remove_accents
+try:
+    from .preprocess import clean_text, tokenize, remove_accents
+except ImportError:
+    from preprocess import clean_text, tokenize, remove_accents
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent

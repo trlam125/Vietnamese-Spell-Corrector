@@ -6,9 +6,12 @@ POS tagging is gracefully disabled.
 
 try:
     from underthesea import pos_tag as _underthesea_pos_tag
+    from underthesea import word_tokenize as _underthesea_word_tokenize
 
     _POS_AVAILABLE = True
 except ImportError:
+    _underthesea_pos_tag = None
+    _underthesea_word_tokenize = None
     _POS_AVAILABLE = False
 
 
@@ -39,3 +42,21 @@ def pos_tag(words: list[str]) -> list[tuple[str, str]]:
     tagged = _underthesea_pos_tag(" ".join(words))
     # underthesea returns list of (word, tag) tuples
     return tagged
+
+
+def pos_tag_text(text: str) -> list[tuple[str, str]]:
+    if not _POS_AVAILABLE or not text:
+        return []
+
+    return _underthesea_pos_tag(text)
+
+
+def word_tokenize_text(text: str) -> str:
+    if not _POS_AVAILABLE or not text:
+        return text
+
+    return _underthesea_word_tokenize(text, format="text")
+
+
+def is_pos_available() -> bool:
+    return _POS_AVAILABLE

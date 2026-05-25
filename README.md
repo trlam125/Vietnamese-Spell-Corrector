@@ -1,245 +1,365 @@
 # Vietnamese Spell Corrector
 
-A spell corrector and accent restoration tool for Vietnamese, built with OpenSubtitles v2018 and Wikipedia Vietnamese.
+Vietnamese spell correction and accent restoration tool with sentence-level context scoring. The project combines word frequency, accent mapping, bigram context, Vietnamese POS/word segmentation, and optional PhoBERT reranking.
 
 ## Key Features
 
-- **Vietnamese Accent Restoration** — automatically adds diacritics to unmarked text (e.g. `toi thich` → `tôi thích`)
-- **Typo Correction** — detects and fixes spelling errors based on corpus word frequency
-- **Top Candidate Suggestions** — returns a ranked list of suggestions with frequency counts
-- **Sentence-level Correction** — processes each word in a sentence while preserving structure
-- **Multi-source Corpus** — combines OpenSubtitles (conversational) and Wikipedia (formal)
-- **Fully Offline** — runs without internet after training
+- **Vietnamese accent restoration** - restores diacritics for unmarked text, for example `toi thich` -> `tôi thích`
+- **Typo correction** - handles common typing mistakes, missing characters, and similar Vietnamese character variants
+- **Sentence-level correction** - corrects whole sentences while preserving punctuation and spacing
+- **Candidate suggestions** - returns ranked word suggestions with frequency counts
+- **Context scoring** - uses word frequency, edit distance, bigrams, POS tags, word segmentation, and semantic reranking
+- **Offline-first runtime** - runs with local model files; PhoBERT is loaded from `models/phobert-base-v2` when available
 
 ## Tech Stack
 
-- **Python 3.10+** — primary programming language
-- **Pickle** — model serialization (word_freq, accent_map)
-- **unicodedata** — Unicode normalization (NFD/NFC)
-- **xml.etree.ElementTree** — streaming Wikipedia XML parser
-- **collections.Counter / defaultdict** — word frequency statistics
+- **Python 3.10+**
+- **underthesea** - Vietnamese tokenization, word segmentation, and POS tagging
+- **torch / transformers / sentencepiece** - optional PhoBERT sentence scoring
+- **pickle** - local model artifact serialization
+- **xml.etree.ElementTree** - streaming parser for large Wikipedia XML dumps
+- **collections.Counter / defaultdict** - frequency and bigram statistics
 
 ## Project Structure
 
-```
+```text
 project/
-├── data/                          # Raw dataset files (not committed)
-│   ├── vi.txt                     # OpenSubtitles Vietnamese
-│   └── viwiki-latest-pages-articles.xml  # Wikipedia dump (optional)
-├── models/                        # Trained model artifacts
-│   ├── word_freq.pkl              # Word frequency dictionary
-│   └── accent_map.pkl             # Unaccented -> accented word mapping
-├── src/
-│   ├── spell_corrector.py         # Core correction algorithm
-│   ├── preprocess.py              # Text normalization and tokenization
-│   ├── train.py                   # Training pipeline
-│   └── demo.py                    # Interactive CLI demo
-├── README.md
-├── requirements.txt
-├── .gitignore
-└── .gitattributes
+|-- data/                                  # Raw training data, ignored by Git
+|   |-- README.md
+|   |-- vi.txt                             # OpenSubtitles Vietnamese
+|   `-- viwiki-latest-pages-articles.xml   # Wikipedia dump, optional
+|-- models/                                # Local model artifacts, ignored by Git
+|   |-- word_freq.pkl
+|   |-- accent_map.pkl
+|   |-- bigram_freq.pkl
+|   `-- phobert-base-v2/                   # Optional local PhoBERT files
+|-- src/
+|   |-- demo.py                            # Interactive CLI demo
+|   |-- pos_tagger.py                      # underthesea helpers
+|   |-- preprocess.py                      # Text cleanup, tokenization, accent removal
+|   |-- semantic_reranker.py               # POS/segmentation/PhoBERT scoring
+|   |-- spell_corrector.py                 # Core correction logic
+|   `-- train.py                           # Training pipeline
+|-- README.md
+|-- requirements.txt
+|-- .gitignore
+`-- .gitattributes
 ```
+
+## Local Assets
+
+The runtime expects these files when using the trained corrector:
+
+```text
+models/word_freq.pkl
+models/accent_map.pkl
+models/bigram_freq.pkl
+```
+
+For transformer reranking, place PhoBERT files here:
+
+```text
+models/phobert-base-v2/
+|-- bpe.codes
+|-- config.json
+|-- pytorch_model.bin
+|-- tokenizer.json
+`-- vocab.txt
+```
+
+`data/` and `models/` are intentionally ignored by Git because they contain large raw datasets and binary model files. Share or download them separately when setting up another machine.
 
 ## Setup
 
-### 1. Create virtual environment
+### 1. Create a virtual environment
 
-```bash
+```powershell
 python -m venv venv
-venv\Scripts\activate        # Windows
+.\venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
-### 2. Download dataset
+### 2. Prepare data or model files
 
-**OpenSubtitles v2018 Vietnamese (required)**
+If trained model files already exist in `models/`, you can run the demo directly.
 
-- Visit: https://opus.nlpl.eu/OpenSubtitles-v2018/mono/
-- Download `OpenSubtitles.raw.vi.gz` (~50 MB)
-- Extract and place as `data/vi.txt`
+To train from raw data, prepare:
 
-> Alternative link: https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/vi.txt.gz
+```text
+data/vi.txt
+data/viwiki-latest-pages-articles.xml   # optional
+```
 
-**Wikipedia Vietnamese XML (optional)**
+OpenSubtitles v2018 Vietnamese:
 
-- Visit: https://dumps.wikimedia.org/viwiki/latest/
-- Download `viwiki-latest-pages-articles.xml.bz2` (~600 MB), extract
-- Place as `data/viwiki-latest-pages-articles.xml`
+- Download `OpenSubtitles.raw.vi.gz` from https://opus.nlpl.eu/OpenSubtitles-v2018/mono/
+- Extract it and place the result at `data/vi.txt`
+- Alternative link: https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/vi.txt.gz
 
-> The file is ~6 GB after extraction. If missing, the training script skips it automatically.
+Wikipedia Vietnamese XML, optional:
 
-### 3. Train the model
+- Download `viwiki-latest-pages-articles.xml.bz2` from https://dumps.wikimedia.org/viwiki/latest/
+- Extract it and place the result at `data/viwiki-latest-pages-articles.xml`
+- The extracted file is large. If it is missing, `src/train.py` skips it automatically.
 
-```bash
+### 3. Train model files
+
+```powershell
 python src/train.py
 ```
 
-The trained models are saved to `models/word_freq.pkl` and `models/accent_map.pkl`.
+Training outputs:
+
+```text
+models/word_freq.pkl
+models/accent_map.pkl
+models/bigram_freq.pkl
+```
 
 ### 4. Run the demo
 
-```bash
+```powershell
 python src/demo.py
 ```
 
-```
+Example:
+
+```text
 Vietnamese Spell Corrector
-Type 'exit' to quit.
+Nhập 'exit' để thoát.
 
-Enter incorrect word/sentence: toi thich xem phim hanh dong
-Suggestion: tôi thích xem phim hành động
+Nhập từ/câu sai: hom nay toi khon di danh cau long
+Gợi ý: hôm nay tôi không đi đánh cầu lông
 ```
 
-## Usage in code
+## Usage in Code
+
+From the project root:
 
 ```python
-from spell_corrector import SpellCorrector
+from src.spell_corrector import SpellCorrector
 
 corrector = SpellCorrector()
 
-corrector.correct_sentence("toi thich xem phim hanh dong")
-# -> "tôi thích xem phim hành động"
+print(corrector.correct_sentence("toi thich xem phim hanh dong"))
+# tôi thích xem phim hành động
 
-corrector.correct_word("thich")
-# -> "thích"
+print(corrector.correct_sentence("hom nay toi khon di danh cau long"))
+# hôm nay tôi không đi đánh cầu lông
 
-corrector.suggest_words("thich", top_k=5)
-# -> [("thích", 12345), ("thịch", 23), ...]
+print(corrector.suggest_words("thich", top_k=5))
 ```
 
-## How the Algorithm Works
+If running a script from inside `src/`, this also works:
 
-Based on Peter Norvig's spell corrector, customized for Vietnamese:
+```python
+from spell_corrector import SpellCorrector
+```
 
-- **Accent Restoration** — lookup `accent_map` to find accented words matching an unaccented form
-- **Edits1** — generate candidates via delete, transpose, replace, insert using the full Vietnamese character set (29 letters + diacritics)
-- **Frequency Ranking** — pick the candidate with the highest corpus frequency
-- **Common Typos** — handle frequently confused character pairs: `i/h`, `u/ư`, `o/ô`, `e/ê`, `a/ă/â`, `n/nh`, `c/k`, `g/gh`
-- **Performance Heuristic** — if direct candidates have frequency >= 1000, skip edits to speed up
+## How It Works
+
+The correction pipeline uses multiple layers:
+
+1. Normalize and tokenize the input.
+2. Generate candidates from accent mapping and common typo edits.
+3. Score candidates with word frequency and edit distance.
+4. Score sentence context with bigram probabilities.
+5. Add POS and word-segmentation signals through `underthesea`.
+6. Rerank whole sentences with PhoBERT if `models/phobert-base-v2` and transformer dependencies are available.
+
+If PhoBERT is unavailable, the corrector still runs with the lighter word frequency, edit-distance, bigram, POS, and segmentation scoring path.
+
+## Git Notes
+
+- Raw data files are ignored: `data/vi.txt`, `data/*.xml`, `data/*.bz2`, `data/*.gz`
+- Model files are ignored: `models/`
+- Large files are configured for Git LFS in `.gitattributes` if you intentionally force-track them.
+- Do not commit `venv/`, `__pycache__/`, local caches, or `.env` files.
 
 ## License
 
-OpenSubtitles dataset is under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The project code is released under the MIT license, for research and educational purposes.
+OpenSubtitles data is distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Wikipedia text is distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Project code is intended for research and educational use.
 
 ---
 
 # Công cụ Sửa Chính Tả Tiếng Việt
 
-Công cụ sửa lỗi chính tả và khôi phục dấu tiếng Việt, kết hợp OpenSubtitles v2018 và Wikipedia Vietnamese.
+Công cụ sửa lỗi chính tả và khôi phục dấu tiếng Việt với chấm điểm theo ngữ cảnh toàn câu. Dự án kết hợp tần suất từ, bản đồ dấu, ngữ cảnh bigram, POS/tách từ tiếng Việt và tùy chọn xếp hạng lại bằng PhoBERT.
 
 ## Tính năng chính
 
-- **Khôi phục dấu tiếng Việt** — tự động thêm dấu cho text không dấu (ví dụ: `toi thich` → `tôi thích`)
-- **Sửa lỗi gõ sai** — phát hiện và sửa typo dựa trên tần suất từ trong corpus
-- **Gợi ý top candidate** — trả về danh sách các từ gợi ý kèm tần suất
-- **Sửa cả câu** — xử lý từng từ trong câu, giữ nguyên cấu trúc
-- **Corpus đa nguồn** — kết hợp OpenSubtitles (hội thoại) và Wikipedia (văn bản chuẩn)
-- **Không cần internet** — chạy offline hoàn toàn sau khi train
+- **Khôi phục dấu tiếng Việt** - thêm dấu cho văn bản không dấu, ví dụ `toi thich` -> `tôi thích`
+- **Sửa lỗi gõ sai** - xử lý lỗi gõ phổ biến, thiếu ký tự và các biến thể ký tự tiếng Việt dễ nhầm
+- **Sửa theo ngữ cảnh câu** - sửa cả câu và giữ nguyên dấu câu, khoảng trắng
+- **Gợi ý ứng viên** - trả về danh sách từ gợi ý đã xếp hạng kèm tần suất
+- **Chấm điểm ngữ cảnh** - dùng tần suất từ, khoảng cách chỉnh sửa, bigram, POS, tách từ và semantic reranking
+- **Ưu tiên chạy offline** - chạy bằng model cục bộ; PhoBERT được tải từ `models/phobert-base-v2` nếu có
 
 ## Công nghệ sử dụng
 
-- **Python 3.10+** — ngôn ngữ chính
-- **Pickle** — lưu/load model (word_freq, accent_map)
-- **unicodedata** — chuẩn hóa Unicode (NFD/NFC)
-- **xml.etree.ElementTree** — đọc Wikipedia XML theo streaming
-- **collections.Counter / defaultdict** — thống kê tần suất từ
+- **Python 3.10+**
+- **underthesea** - tokenize, tách từ và POS tagging tiếng Việt
+- **torch / transformers / sentencepiece** - chấm điểm câu bằng PhoBERT nếu có model cục bộ
+- **pickle** - lưu các file model cục bộ
+- **xml.etree.ElementTree** - đọc streaming file Wikipedia XML lớn
+- **collections.Counter / defaultdict** - thống kê tần suất từ và bigram
 
 ## Cấu trúc project
 
-```
+```text
 project/
-├── data/                          # Raw dữ liệu (không commit)
-│   ├── vi.txt                     # OpenSubtitles Vietnamese
-│   └── viwiki-latest-pages-articles.xml  # Wikipedia dump (optional)
-├── models/                        # Model đã train
-│   ├── word_freq.pkl              # Từ điển tần suất từ
-│   └── accent_map.pkl             # Mapping: không dấu -> có dấu
-├── src/
-│   ├── spell_corrector.py         # Core: thuật toán sửa lỗi
-│   ├── preprocess.py              # Chuẩn hóa text, tokenize
-│   ├── train.py                   # Pipeline training
-│   └── demo.py                    # Interactive CLI demo
-├── README.md
-├── requirements.txt
-├── .gitignore
-└── .gitattributes
+|-- data/                                  # Dữ liệu train thô, không commit
+|   |-- README.md
+|   |-- vi.txt                             # OpenSubtitles Vietnamese
+|   `-- viwiki-latest-pages-articles.xml   # Wikipedia dump, tùy chọn
+|-- models/                                # Model cục bộ, không commit
+|   |-- word_freq.pkl
+|   |-- accent_map.pkl
+|   |-- bigram_freq.pkl
+|   `-- phobert-base-v2/                   # PhoBERT cục bộ, tùy chọn
+|-- src/
+|   |-- demo.py                            # CLI demo
+|   |-- pos_tagger.py                      # Helper cho underthesea
+|   |-- preprocess.py                      # Làm sạch text, tokenize, bỏ dấu
+|   |-- semantic_reranker.py               # Chấm điểm POS/tách từ/PhoBERT
+|   |-- spell_corrector.py                 # Logic sửa lỗi chính
+|   `-- train.py                           # Pipeline train
+|-- README.md
+|-- requirements.txt
+|-- .gitignore
+`-- .gitattributes
 ```
+
+## Tài nguyên cục bộ
+
+Khi chạy corrector đã train, cần các file sau:
+
+```text
+models/word_freq.pkl
+models/accent_map.pkl
+models/bigram_freq.pkl
+```
+
+Nếu muốn dùng transformer reranking, đặt các file PhoBERT tại:
+
+```text
+models/phobert-base-v2/
+|-- bpe.codes
+|-- config.json
+|-- pytorch_model.bin
+|-- tokenizer.json
+`-- vocab.txt
+```
+
+`data/` và `models/` được cố ý bỏ qua khỏi Git vì chứa dữ liệu thô và file model lớn. Khi setup máy khác, hãy sao chép hoặc tải riêng các thư mục này.
 
 ## Cài đặt
 
-### 1. Tạo virtual environment
+### 1. Tạo môi trường ảo
 
-```bash
+```powershell
 python -m venv venv
-venv\Scripts\activate        # Windows
+.\venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
-### 2. Tải dataset
+### 2. Chuẩn bị dữ liệu hoặc model
 
-**OpenSubtitles v2018 Vietnamese (bắt buộc)**
+Nếu đã có sẵn model trong `models/`, có thể chạy demo trực tiếp.
 
-- Truy cập: https://opus.nlpl.eu/OpenSubtitles-v2018/mono/
-- Tải `OpenSubtitles.raw.vi.gz` (~50 MB)
-- Giải nén và đặt vào `data/vi.txt`
+Nếu muốn train lại từ dữ liệu thô, chuẩn bị:
 
-> Alternative link: https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/vi.txt.gz
+```text
+data/vi.txt
+data/viwiki-latest-pages-articles.xml   # tùy chọn
+```
 
-**Wikipedia Vietnamese XML (tùy chọn)**
+OpenSubtitles v2018 Vietnamese:
 
-- Truy cập: https://dumps.wikimedia.org/viwiki/latest/
-- Tải `viwiki-latest-pages-articles.xml.bz2` (~600 MB), giải nén
-- Đặt vào `data/viwiki-latest-pages-articles.xml`
+- Tải `OpenSubtitles.raw.vi.gz` từ https://opus.nlpl.eu/OpenSubtitles-v2018/mono/
+- Giải nén và đặt kết quả tại `data/vi.txt`
+- Link thay thế: https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2018/mono/vi.txt.gz
 
-> File ~6 GB sau giải nén. Nếu không có, script train tự bỏ qua.
+Wikipedia Vietnamese XML, tùy chọn:
+
+- Tải `viwiki-latest-pages-articles.xml.bz2` từ https://dumps.wikimedia.org/viwiki/latest/
+- Giải nén và đặt kết quả tại `data/viwiki-latest-pages-articles.xml`
+- File sau giải nén rất lớn. Nếu không có, `src/train.py` sẽ tự bỏ qua.
 
 ### 3. Train model
 
-```bash
+```powershell
 python src/train.py
 ```
 
-Model sẽ được lưu vào `models/word_freq.pkl` và `models/accent_map.pkl`.
+Kết quả train:
+
+```text
+models/word_freq.pkl
+models/accent_map.pkl
+models/bigram_freq.pkl
+```
 
 ### 4. Chạy demo
 
-```bash
+```powershell
 python src/demo.py
 ```
 
-```
+Ví dụ:
+
+```text
 Vietnamese Spell Corrector
 Nhập 'exit' để thoát.
 
-Nhập từ/câu sai: toi thich xem phim hanh dong
-Gợi ý: tôi thích xem phim hành động
+Nhập từ/câu sai: hom nay toi khon di danh cau long
+Gợi ý: hôm nay tôi không đi đánh cầu lông
 ```
 
 ## Sử dụng trong code
 
+Khi import từ thư mục gốc project:
+
 ```python
-from spell_corrector import SpellCorrector
+from src.spell_corrector import SpellCorrector
 
 corrector = SpellCorrector()
 
-corrector.correct_sentence("toi thich xem phim hanh dong")
-# -> "tôi thích xem phim hành động"
+print(corrector.correct_sentence("toi thich xem phim hanh dong"))
+# tôi thích xem phim hành động
 
-corrector.correct_word("thich")
-# -> "thích"
+print(corrector.correct_sentence("hom nay toi khon di danh cau long"))
+# hôm nay tôi không đi đánh cầu lông
 
-corrector.suggest_words("thich", top_k=5)
-# -> [("thích", 12345), ("thịch", 23), ...]
+print(corrector.suggest_words("thich", top_k=5))
 ```
 
-## Thuật toán
+Nếu chạy script bên trong thư mục `src/`, có thể import như sau:
 
-Dựa trên Peter Norvig's spell corrector, tùy biến cho tiếng Việt:
+```python
+from spell_corrector import SpellCorrector
+```
 
-- **Khôi phục dấu** — lookup `accent_map` để tìm các từ có dấu tương ứng với dạng không dấu
-- **Edits1** — sinh candidates qua delete, transpose, replace, insert với bộ ký tự tiếng Việt (29 chữ cái + dấu)
-- **Frequency ranking** — chọn candidate có tần suất cao nhất trong corpus
-- **Typo phổ biến** — xử lý các cặp dễ gõ nhầm: `i/h`, `u/ư`, `o/ô`, `e/ê`, `a/ă/â`, `n/nh`, `c/k`, `g/gh`
-- **Heuristic tối ưu** — nếu direct candidates có tần suất >= 1000, bỏ qua edits để tăng tốc
+## Cách hoạt động
+
+Pipeline sửa lỗi gồm nhiều lớp:
+
+1. Chuẩn hóa và tokenize input.
+2. Sinh ứng viên từ bản đồ dấu và các biến thể lỗi gõ phổ biến.
+3. Chấm điểm ứng viên bằng tần suất từ và khoảng cách chỉnh sửa.
+4. Chấm điểm ngữ cảnh câu bằng xác suất bigram.
+5. Bổ sung tín hiệu POS và tách từ thông qua `underthesea`.
+6. Xếp hạng lại toàn câu bằng PhoBERT nếu có `models/phobert-base-v2` và các thư viện transformer.
+
+Nếu không có PhoBERT, corrector vẫn chạy bằng luồng nhẹ hơn gồm tần suất từ, edit distance, bigram, POS và tách từ.
+
+## Ghi chú Git
+
+- Dữ liệu thô được ignore: `data/vi.txt`, `data/*.xml`, `data/*.bz2`, `data/*.gz`
+- Model được ignore: `models/`
+- `.gitattributes` đã cấu hình Git LFS cho file lớn nếu bạn cố ý force-track.
+- Không commit `venv/`, `__pycache__/`, cache cục bộ hoặc file `.env`.
 
 ## Giấy phép
 
-OpenSubtitles dataset thuộc [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Code trong project thuộc MIT license, dùng cho nghiên cứu và học tập.
+Dữ liệu OpenSubtitles thuộc [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Nội dung Wikipedia thuộc [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Code trong project dùng cho mục đích nghiên cứu và học tập.

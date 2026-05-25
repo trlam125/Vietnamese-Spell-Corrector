@@ -1,1 +1,4 @@
 underthesea
+torch
+transformers
+sentencepiece

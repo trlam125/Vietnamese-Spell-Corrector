@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 dist/
 build/
 
@@ -10,6 +15,11 @@ build/
 venv/
 .venv/
 env/
+
+# Environment files
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -21,8 +31,10 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
-# Models (large binary files)
-models/*.pkl
+# Model artifacts (large binary files)
+models/
+!models/.gitkeep
+!models/README.md
 
 # Data (large raw files)
 data/vi.txt
